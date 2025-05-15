@@ -1,0 +1,1 @@
+console=serial0,115200 root=PARTUUID=907af7d0-02 rootfstype=ext4 rootwait
