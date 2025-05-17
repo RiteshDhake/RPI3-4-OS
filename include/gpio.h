@@ -16,3 +16,12 @@ typedef enum _GpioFunc {
 void gpio_pin_set_func(u8 pinNumber , GpioFunc func);
 
 void gpio_pin_enable(u8 pinNumber);
+
+void gpio_init( GpioFunc func);
+
+void gpio_set(u8 pinNumber);
+
+void gpio_clear(u8 pinNumber);
+
+void gpio_debug();
+
