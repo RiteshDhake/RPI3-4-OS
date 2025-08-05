@@ -5,6 +5,9 @@
 #include "printf.h"
 #include "irq.h"
 #include "timer.h"
+#include "mailbox.h"
+#include "video.h"
+
 
 void putc(void *p , char c){
     if(c == '\n'){
@@ -39,8 +42,40 @@ void kernel_main() {
 #if RPI_VERSION == 4
     printf("\tBoard: Raspberry PI 4\n");
 #endif
+    printf("MAILBOX:\n");
+
+    printf("CORE CLOCK: %d\n", mailbox_clock_rate(CT_CORE));
+    printf("EMMC CLOCK: %d\n", mailbox_clock_rate(CT_EMMC));
+    printf("UART CLOCK: %d\n", mailbox_clock_rate(CT_UART));
+    printf("ARM  CLOCK: %d\n", mailbox_clock_rate(CT_ARM));
+
+    u32 max_temp = 0;
+
+    mailbox_generic_command(RPI_FIRMWARE_GET_MAX_TEMPERATURE, 0, &max_temp);
+
+    //Do video...
+
+    printf("Resolution 1824x984\n");
+    video_set_resolution(1824, 984, 32);
+
+    printf("Resolution 1024x768\n");
+    video_set_resolution(1024, 768, 32);
+
+    printf("Resolution 1900x1200\n");
+    video_set_resolution(1900, 1200, 32);
+
+    printf("Resolution 480x320\n");
+    video_set_resolution(480, 320, 32);
+
 
     printf ("\nException Level: %d \n",get_el());
     while(1) {
+        u32 cur_temp = 0;
+
+        mailbox_generic_command(RPI_FIRMWARE_GET_TEMPERATURE, 0, &cur_temp);
+
+        printf("Cur temp: %dC MAX: %dC\n", cur_temp / 1000, max_temp / 1000);
+
+        timer_sleep(1000);
     }
 }
