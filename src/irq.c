@@ -75,5 +75,4 @@ void handle_irq() {
             handle_timer_3();
         }
     }
-
 }

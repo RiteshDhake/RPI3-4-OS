@@ -55,17 +55,49 @@ void kernel_main() {
 
     //Do video...
 
-    printf("Resolution 1824x984\n");
-    video_set_resolution(1824, 984, 32);
+    video_init();
 
-    printf("Resolution 1024x768\n");
-    video_set_resolution(1024, 768, 32);
+    printf("NO DMA...\n");
+    video_set_dma(false);
 
     printf("Resolution 1900x1200\n");
     video_set_resolution(1900, 1200, 32);
 
-    printf("Resolution 480x320\n");
-    video_set_resolution(480, 320, 32);
+    printf("Resolution 1024x768\n");
+    video_set_resolution(1024, 768, 32);
+
+    printf("Resolution 800x600\n");
+    video_set_resolution(800, 600, 32);
+
+    printf("Resolution 1900x1200\n");
+    video_set_resolution(1900, 1200, 8);
+
+    printf("Resolution 1024x768\n");
+    video_set_resolution(1024, 768, 8);
+
+    printf("Resolution 800x600\n");
+    video_set_resolution(800, 600, 8);
+
+    printf("YES DMA...\n");
+    video_set_dma(true);
+
+    printf("Resolution 1900x1200\n");
+    video_set_resolution(1900, 1200, 32);
+
+    printf("Resolution 1024x768\n");
+    video_set_resolution(1024, 768, 32);
+
+    printf("Resolution 800x600\n");
+    video_set_resolution(800, 600, 32);
+
+    printf("Resolution 1900x1200\n");
+    video_set_resolution(1900, 1200, 8);
+
+    printf("Resolution 1024x768\n");
+    video_set_resolution(1024, 768, 8);
+
+    printf("Resolution 800x600\n");
+    video_set_resolution(800, 600, 8);
 
 
     printf ("\nException Level: %d \n",get_el());
@@ -77,5 +109,6 @@ void kernel_main() {
         printf("Cur temp: %dC MAX: %dC\n", cur_temp / 1000, max_temp / 1000);
 
         timer_sleep(1000);
+    
     }
 }
