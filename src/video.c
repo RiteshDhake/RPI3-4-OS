@@ -49,9 +49,49 @@ static u32 *bg8_buffer;
 #define MB (1024 * 1024)
 
 //hack for not having an allocate function yet...
+#define UNCACHED_MEM_BASE 0x40000000
 #define BG32_MEM_LOCATION (LOW_MEMORY + (10 * MB))
 #define BG8_MEM_LOCATION (BG32_MEM_LOCATION + (10 * MB))
 #define VB_MEM_LOCATION (BG8_MEM_LOCATION + (4 * MB))
+
+#define MAX_CHARS 256
+static u32 *glyph_cache_32bpp[MAX_CHARS];
+static u8 *glyph_cache_8bpp[MAX_CHARS];
+static bool cache_initialized = false;
+
+typedef struct {
+    u32 x1, y1, x2, y2;
+    bool dirty;
+} dirty_rect;
+
+static dirty_rect screen_dirty = {0, 0, 0, 0, false};
+
+void init_glyph_cache() {
+    if (cache_initialized) return;
+    
+    u32 glyph_size_32 = font_get_width() * font_get_height() * sizeof(u32);
+    u32 glyph_size_8 = font_get_width() * font_get_height();
+    
+    // Allocate cache memory (you'll need a proper allocator here)
+    u8 *cache_mem = (u8*)(VB_MEM_LOCATION + (4 * MB)); // After video buffer
+    
+    for (int c = 0; c < MAX_CHARS; c++) {
+        glyph_cache_32bpp[c] = (u32*)(cache_mem + c * glyph_size_32);
+        glyph_cache_8bpp[c] = (u8*)(cache_mem + (MAX_CHARS * glyph_size_32) + c * glyph_size_8);
+        
+        // Pre-render all characters
+        for (int y = 0; y < font_get_height(); y++) {
+            for (int x = 0; x < font_get_width(); x++) {
+                bool pixel = font_get_pixel(c, x, y);
+                int idx = y * font_get_width() + x;
+                
+                glyph_cache_32bpp[c][idx] = pixel ? TEXT_COLOR : BACK_COLOR;
+                glyph_cache_8bpp[c][idx] = pixel ? 2 : 1; // palette indices
+            }
+        }
+    }
+    cache_initialized = true;
+}
 
 void video_init() {
     dma = dma_open_channel(CT_NORMAL);
@@ -70,13 +110,12 @@ void video_init() {
     for (int i=0; i<(4 * MB) / 4; i++) {
         bg8_buffer[i] = 0x01010101;
     }
+    init_glyph_cache();
 }
 
-static bool use_dma = false;
+static bool use_dma = true;
 
 #define BUS_ADDR(x) (((u64)x | 0x40000000) & ~0xC0000000)
-// #define BUS_ADDRESS(addr) (((addr)& ~0xC0000000)|GPU_MEM_BASE)
-
 #define FRAMEBUFFER ((volatile u8 *)BUS_ADDR(fb_req.buff.base))
 #define DMABUFFER ((volatile u8 *)vid_buffer)
 #define DRAWBUFFER (use_dma ? DMABUFFER : FRAMEBUFFER)
@@ -90,20 +129,17 @@ void do_dma(void *dest, void *src, u32 total) {
     u32 ms_start = timer_get_ticks() / 1000;
 
     u32 start = 0;
-
-    while(total > 0) {
-        int num_bytes = total;
-
-        if (num_bytes > 0xFFFFFF) {
-            num_bytes = 0xFFFFFF;
-        }
+    const u32 max_chunk = 0x3FF000; // Larger chunks for fewer DMA setups
+    
+    while (total > 0) {
+        u32 num_bytes = (total > max_chunk) ? max_chunk : total;
         
-        dma_setup_mem_copy(dma, dest + start, src + start, num_bytes, 2);
-        
+        dma_setup_mem_copy(dma, dest + start, src + start, num_bytes, 4); // Wider transfers
         dma_start(dma);
-
+        
+        // Don't wait immediately - overlap with other work if possible
         dma_wait(dma);
-
+        
         start += num_bytes;
         total -= num_bytes;
     }
@@ -116,6 +152,27 @@ void do_dma(void *dest, void *src, u32 total) {
 
 void video_dma() {
     do_dma(FRAMEBUFFER, DMABUFFER, fb_req.buff.screen_size);
+}
+
+
+static bool screen_initialized = false;
+
+void clear_screen_once() {
+    if (screen_initialized) return;
+    
+    if (fb_req.depth.bpp == 32) {
+        u32 *buff = (u32 *)DRAWBUFFER;
+        for (int i = 0; i < fb_req.buff.screen_size / 4; i++) {
+            buff[i] = BACK_COLOR;
+        }
+    } else if (fb_req.depth.bpp == 8) {
+        u32 *buff = (u32 *)DRAWBUFFER;
+        for (int i = 0; i < fb_req.buff.screen_size / 4; i++) {
+            buff[i] = 0x01010101;
+        }
+    }
+    
+    screen_initialized = true;
 }
 
 typedef struct  {
@@ -179,6 +236,9 @@ void video_set_resolution(u32 xres, u32 yres, u32 bpp) {
         mailbox_process((mailbox_tag *)&palette, sizeof(palette));
     }
 
+    clear_screen_once();
+    if (use_dma) video_dma();
+
     //draw some text showing what resolution is...
 
     char res[64];
@@ -238,7 +298,7 @@ void video_set_resolution(u32 xres, u32 yres, u32 bpp) {
         ms_end = timer_get_ticks() / 1000;
 
         sprintf(res, "FRAME DRAW TIME: %d ms\n", ms_end - ms_start);
-        video_draw_string(res, 20, 100 + (i * 20));
+        video_draw_string(res, 20+ (i * 20), 100 + (i * 20));
 
         if (use_dma) video_dma();
 
@@ -248,39 +308,71 @@ void video_set_resolution(u32 xres, u32 yres, u32 bpp) {
 
 void video_draw_pixel(u32 x, u32 y, u32 color) {
 
-    u32 pixel_offset = (x * (fb_req.depth.bpp >> 3)) + (y * fb_req.pitch.pitch);
-
+    if (x >= fb_req.res.xres || y >= fb_req.res.yres) return;
+    
     if (fb_req.depth.bpp == 32) {
         u32 *buff = (u32 *)DRAWBUFFER;
-        buff[pixel_offset / 4] = color;
+        buff[y * (fb_req.pitch.pitch >> 2) + x] = color;
     } else if (fb_req.depth.bpp == 16) {
         u16 *buff = (u16 *)DRAWBUFFER;
-        buff[pixel_offset / 2] = color & 0xFFFF;
+        buff[y * (fb_req.pitch.pitch >> 1) + x] = color & 0xFFFF;
     } else {
-        DRAWBUFFER[pixel_offset++] = (color & 0xFF);
+        u8 *buff = (u8 *)DRAWBUFFER;
+        buff[y * fb_req.pitch.pitch + x] = color & 0xFF;
     }
 
 }
 
 void video_draw_char(char c, u32 pos_x, u32 pos_y) {
-    u32 text_color = TEXT_COLOR;
-    u32 back_color = BACK_COLOR;
-
-    if (fb_req.depth.bpp == 8) {
-        text_color = 2;
-        back_color = 1;
-    }
-
-    for (int y=0; y<font_get_height(); y++) {
-        for (int x=0; x<font_get_width(); x++) {
-            bool yes = font_get_pixel(c, x, y); //gets whether there is a pixel for the font at this pos...
-            video_draw_pixel(pos_x + x, pos_y + y, yes ? text_color : back_color);
+    if (!cache_initialized) return;
+    if (pos_x + font_get_width() > fb_req.res.xres || 
+        pos_y + font_get_height() > fb_req.res.yres) return;
+    
+    unsigned char uc = (unsigned char)c;
+    if (uc >= MAX_CHARS) uc = '?';
+    
+    if (fb_req.depth.bpp == 32) {
+        // Fast 32bpp blit using DMA or memcpy
+        u32 *src = glyph_cache_32bpp[uc];
+        
+        for (int y = 0; y < font_get_height(); y++) {
+            u32 *dest = (u32 *)DRAWBUFFER + 
+                        (pos_y + y) * (fb_req.pitch.pitch >> 2) + pos_x;
+            
+            // Use DMA for larger characters or memcpy for small ones
+            if (font_get_width() >= 16) {
+                do_dma(dest, src + y * font_get_width(), 
+                               font_get_width() * sizeof(u32));
+            } else {
+                for (int x = 0; x < font_get_width(); x++) {
+                    dest[x] = src[y * font_get_width() + x];
+                }
+            }
+        }
+    } else if (fb_req.depth.bpp == 8) {
+        u8 *src = glyph_cache_8bpp[uc];
+        
+        for (int y = 0; y < font_get_height(); y++) {
+            u8 *dest = (u8 *)DRAWBUFFER + 
+                       (pos_y + y) * fb_req.pitch.pitch + pos_x;
+            
+            for (int x = 0; x < font_get_width(); x++) {
+                dest[x] = src[y * font_get_width() + x];
+            }
         }
     }
 }
 
 void video_draw_string(char *s, u32 pos_x, u32 pos_y) {
-    for (int i=0; s[i] != 0; pos_x += (font_get_width() + 2), i++) {
-        video_draw_char(s[i], pos_x, pos_y);
+    u32 x = pos_x;
+    
+    for (int i = 0; s[i] != 0; i++) {
+        video_draw_char(s[i], x, pos_y);
+        x += font_get_width() + 2;
+        
+        if (x + font_get_width() >= fb_req.res.xres) {
+            x = pos_x;
+            pos_y += font_get_height() + 2;
+        }
     }
 }

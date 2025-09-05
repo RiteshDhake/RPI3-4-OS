@@ -57,47 +57,47 @@ void kernel_main() {
 
     video_init();
 
-    printf("NO DMA...\n");
-    video_set_dma(false);
+    // printf("NO DMA...\n");
+    // video_set_dma(false);
 
-    printf("Resolution 1900x1200\n");
-    video_set_resolution(1900, 1200, 32);
+    // printf("Resolution 1900x1200\n");
+    // video_set_resolution(1900, 1200, 32);
 
-    printf("Resolution 1024x768\n");
-    video_set_resolution(1024, 768, 32);
+    // printf("Resolution 1024x768\n");
+    // video_set_resolution(1024, 768, 32);
 
-    printf("Resolution 800x600\n");
-    video_set_resolution(800, 600, 32);
+    // printf("Resolution 800x600\n");
+    // video_set_resolution(800, 600, 32);
 
-    printf("Resolution 1900x1200\n");
-    video_set_resolution(1900, 1200, 8);
+    // printf("Resolution 1900x1200\n");
+    // video_set_resolution(1900, 1200, 8);
 
-    printf("Resolution 1024x768\n");
-    video_set_resolution(1024, 768, 8);
+    // printf("Resolution 1024x768\n");
+    // video_set_resolution(1024, 768, 8);
 
-    printf("Resolution 800x600\n");
-    video_set_resolution(800, 600, 8);
+    // printf("Resolution 800x600\n");
+    // video_set_resolution(800, 600, 8);
 
     printf("YES DMA...\n");
     video_set_dma(true);
 
-    printf("Resolution 1900x1200\n");
-    video_set_resolution(1900, 1200, 32);
+    // printf("Resolution 1900x1200\n");
+    // video_set_resolution(1900, 1200, 32);
 
-    printf("Resolution 1024x768\n");
-    video_set_resolution(1024, 768, 32);
+    // printf("Resolution 1024x768\n");
+    // video_set_resolution(1024, 768, 32);
 
     printf("Resolution 800x600\n");
     video_set_resolution(800, 600, 32);
 
-    printf("Resolution 1900x1200\n");
-    video_set_resolution(1900, 1200, 8);
+    // printf("Resolution 1900x1200\n");
+    // video_set_resolution(1900, 1200, 8);
 
-    printf("Resolution 1024x768\n");
-    video_set_resolution(1024, 768, 8);
+    // printf("Resolution 1024x768\n");
+    // video_set_resolution(1024, 768, 8);
 
-    printf("Resolution 800x600\n");
-    video_set_resolution(800, 600, 8);
+    // printf("Resolution 800x600\n");
+    // video_set_resolution(800, 600, 8);
 
 
     printf ("\nException Level: %d \n",get_el());
