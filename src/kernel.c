@@ -96,8 +96,8 @@ void kernel_main() {
     // printf("Resolution 1024x768\n");
     // video_set_resolution(1024, 768, 8);
 
-    // printf("Resolution 800x600\n");
-    // video_set_resolution(800, 600, 8);
+    printf("Resolution 800x600\n");
+    video_set_resolution(800, 600, 8);
 
 
     printf ("\nException Level: %d \n",get_el());
