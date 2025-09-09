@@ -4,6 +4,41 @@
 #include "video.h"
 #include "dma.h"
 #include "mm.h"
+#include <stddef.h>
+
+// Copy up to n characters from src to dest.
+// If src is shorter than n, pad the rest with '\0'.
+// Returns dest.
+char *strncpy(char *dest, const char *src, size_t n) {
+    size_t i = 0;
+
+    // Copy characters until we hit end of src or n
+    for (; i < n && src[i] != '\0'; i++) {
+        dest[i] = src[i];
+    }
+
+    // Pad remaining space with '\0'
+    for (; i < n; i++) {
+        dest[i] = '\0';
+    }
+
+    return dest;
+}
+
+// #include <stddef.h>
+
+// Compare two strings.
+// Returns:
+//   0  if s1 == s2
+//   <0 if s1 < s2
+//   >0 if s1 > s2
+int strcmp(const char *s1, const char *s2) {
+    while (*s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+    }
+    return (unsigned char)(*s1) - (unsigned char)(*s2);
+}
 
 typedef struct {
     mailbox_tag tag;
@@ -42,6 +77,28 @@ static u8 *vid_buffer;
 
 static u32 *bg32_buffer;
 static u32 *bg8_buffer;
+
+
+#define MAX_TEXT_OBJECTS 128
+#define MAX_TEXT_LENGTH 128
+
+typedef struct {
+    char text[MAX_TEXT_LENGTH];
+    u32 x, y;
+    u32 color;
+    bool visible;
+    bool dirty;  // Needs redraw
+    u32 id;     // Unique identifier
+} text_object;
+
+static text_object text_objects[MAX_TEXT_OBJECTS];
+static int num_text_objects = 0;
+static u32 next_text_id = 1;
+
+// FRAME BUFFER MANAGEMENT
+static bool frame_dirty = false;
+static u32 frame_count = 0;
+static u64 last_frame_time = 0;
 
 #define TEXT_COLOR 0xFFFFFFFF
 #define BACK_COLOR 0xFF0055BB
@@ -111,6 +168,10 @@ void video_init() {
         bg8_buffer[i] = 0x01010101;
     }
     init_glyph_cache();
+    
+    // Initialize text system
+    num_text_objects = 0;
+    frame_dirty = true;
 }
 
 static bool use_dma = true;
@@ -172,8 +233,215 @@ typedef struct  {
     u32 entries[8];
 } mailbox_set_palette;
 
-void video_set_resolution(u32 xres, u32 yres, u32 bpp) {
 
+// Add text to screen - returns ID for later updates
+u32 video_add_text(char *text, u32 x, u32 y, u32 color) {
+    if (num_text_objects >= MAX_TEXT_OBJECTS) return 0;
+    
+    text_object *obj = &text_objects[num_text_objects++];
+    strncpy(obj->text, text, MAX_TEXT_LENGTH - 1);
+    obj->text[MAX_TEXT_LENGTH - 1] = 0;// strings should be null terminated for printf function
+    obj->x = x;
+    obj->y = y;
+    obj->color = color;
+    obj->visible = true;
+    obj->dirty = true;
+    obj->id = next_text_id++;
+    
+    frame_dirty = true;
+    return obj->id;
+}
+
+// Update existing text
+void video_update_text(u32 id, char *new_text) {
+    for (int i = 0; i < num_text_objects; i++) {
+        if (text_objects[i].id == id) {
+            if (strcmp(text_objects[i].text, new_text) != 0) {
+                strncpy(text_objects[i].text, new_text, MAX_TEXT_LENGTH - 1);
+                text_objects[i].text[MAX_TEXT_LENGTH - 1] = 0;
+                text_objects[i].dirty = true;
+                frame_dirty = true;
+            }
+            break;
+        }
+    }
+}
+
+// Move text to new position
+void video_move_text(u32 id, u32 x, u32 y) {
+    for (int i = 0; i < num_text_objects; i++) {
+        if (text_objects[i].id == id) {
+            if (text_objects[i].x != x || text_objects[i].y != y) {
+                text_objects[i].x = x;
+                text_objects[i].y = y;
+                text_objects[i].dirty = true;
+                frame_dirty = true;
+            }
+            break;
+        }
+    }
+}
+
+// Hide/show text
+void video_set_text_visible(u32 id, bool visible) {
+    for (int i = 0; i < num_text_objects; i++) {
+        if (text_objects[i].id == id) {
+            if (text_objects[i].visible != visible) {
+                text_objects[i].visible = visible;
+                text_objects[i].dirty = true;
+                frame_dirty = true;
+            }
+            break;
+        }
+    }
+}
+
+// Remove text
+void video_remove_text(u32 id) {
+    for (int i = 0; i < num_text_objects; i++) {
+        if (text_objects[i].id == id) {
+            // Shift remaining objects down
+            for (int j = i; j < num_text_objects - 1; j++) {
+                text_objects[j] = text_objects[j + 1];
+            }
+            num_text_objects--;
+            frame_dirty = true;
+            break;
+        }
+    }
+}
+
+// Clear all text
+void video_clear_all_text() {
+    if (num_text_objects > 0) {
+        num_text_objects = 0;
+        frame_dirty = true;
+    }
+}
+
+// Keep your optimized drawing functions but make them work with colors
+void video_draw_char_colored(char c, u32 pos_x, u32 pos_y, u32 text_color, u32 bg_color) {
+    if (!cache_initialized) return;
+    if (pos_x + font_get_width() > fb_req.res.xres || 
+        pos_y + font_get_height() > fb_req.res.yres) return;
+    
+    unsigned char uc = (unsigned char)c;
+    if (uc >= MAX_CHARS) uc = '?';
+    
+    if (fb_req.depth.bpp == 32) {
+        u32 pitch_words = fb_req.pitch.pitch >> 2;
+        
+        for (int y = 0; y < font_get_height(); y++) {
+            u32 *dest = (u32 *)DRAWBUFFER + (pos_y + y) * pitch_words + pos_x;
+            
+            for (int x = 0; x < font_get_width(); x++) {
+                bool pixel = font_get_pixel(c, x, y);
+                dest[x] = pixel ? text_color : bg_color;
+            }
+        }
+    } else if (fb_req.depth.bpp == 8) {
+        for (int y = 0; y < font_get_height(); y++) {
+            u8 *dest = (u8 *)DRAWBUFFER + (pos_y + y) * fb_req.pitch.pitch + pos_x;
+            
+            for (int x = 0; x < font_get_width(); x++) {
+                bool pixel = font_get_pixel(c, x, y);
+                dest[x] = pixel ? (text_color & 0xFF) : (bg_color & 0xFF);
+            }
+        }
+    }
+}
+
+void video_draw_string_colored(char *s, u32 pos_x, u32 pos_y, u32 text_color, u32 bg_color) {
+    u32 x = pos_x;
+    int len = 0;
+    while (s[len]) len++;
+    
+    for (int i = 0; i < len; i++) {
+        video_draw_char_colored(s[i], x, pos_y, text_color, bg_color);
+        x += font_get_width() + 2;
+        
+        if (x + font_get_width() >= fb_req.res.xres) {
+            x = pos_x;
+            pos_y += font_get_height() + 2;
+        }
+    }
+}
+
+// OPTIMIZED FRAME RENDERING
+void video_render_frame() {
+    if (!frame_dirty) return; // Skip if nothing changed
+    
+    u64 ms_start = timer_get_ticks() / 1000;
+    
+    // Clear background (keeping your optimization)
+    if (fb_req.depth.bpp == 32) {
+        if (use_dma) {
+            do_dma((void*)vid_buffer, bg32_buffer, fb_req.buff.screen_size);
+        } else {
+            u32 *dest = (u32 *)FRAMEBUFFER;
+            u32 *src = bg32_buffer;
+            u32 count = fb_req.buff.screen_size / 4;
+            while (count >= 4) {
+                dest[0] = src[0]; dest[1] = src[1]; 
+                dest[2] = src[2]; dest[3] = src[3];
+                dest += 4; src += 4; count -= 4;
+            }
+            while (count--) *dest++ = *src++;
+        }
+    } else if (fb_req.depth.bpp == 8) {
+        if (use_dma) {
+            do_dma((void*)vid_buffer, bg8_buffer, fb_req.buff.screen_size);
+        } else {
+            u32 *dest = (u32 *)FRAMEBUFFER;
+            u32 *src = bg8_buffer;
+            u32 count = fb_req.buff.screen_size / 4;
+            while (count >= 4) {
+                dest[0] = src[0]; dest[1] = src[1];
+                dest[2] = src[2]; dest[3] = src[3];
+                dest += 4; src += 4; count -= 4;
+            }
+            while (count--) *dest++ = *src++;
+        }
+    }
+    
+    // Draw all visible text objects
+    for (int i = 0; i < num_text_objects; i++) {
+        text_object *obj = &text_objects[i];
+        if (obj->visible) {
+            video_draw_string_colored(obj->text, obj->x, obj->y, obj->color, BACK_COLOR);
+            obj->dirty = false;
+        }
+    }
+    
+    // Single DMA transfer for entire frame
+    if (use_dma) {
+        video_dma();
+    }
+    
+    frame_dirty = false;
+    frame_count++;
+    last_frame_time = timer_get_ticks() / 1000 - ms_start;
+}
+
+// Get frame timing info
+u32 video_get_frame_time() {
+    return (u32)last_frame_time;
+}
+
+u32 video_get_frame_count() {
+    return frame_count;
+}
+
+// Force next frame to redraw (useful for animations)
+void video_mark_dirty() {
+    frame_dirty = true;
+}
+
+
+
+
+// CLEAN video_set_resolution without hardcoded demo
+void video_set_resolution(u32 xres, u32 yres, u32 bpp) {
     fb_req.res.tag.id = RPI_FIRMWARE_FRAMEBUFFER_SET_PHYSICAL_WIDTH_HEIGHT;
     fb_req.res.tag.buffer_size = 8;
     fb_req.res.tag.value_length = 8;
@@ -217,9 +485,7 @@ void video_set_resolution(u32 xres, u32 yres, u32 bpp) {
     palette.entries[6] = 0x55555555;
     palette.entries[7] = 0xCCCCCCCC;
 
-    //sets the actual resolution
     mailbox_process((mailbox_tag *)&fb_req, sizeof(fb_req));
-
     printf("Allocated Buffer: %X - %d - %d\n", fb_req.buff.base, fb_req.buff.screen_size, fb_req.depth.bpp);
 
     if (bpp == 8) {
@@ -227,98 +493,10 @@ void video_set_resolution(u32 xres, u32 yres, u32 bpp) {
     }
 
     clear_screen_once();
-
-    // CRITICAL OPTIMIZATION: Pre-build all text strings and positions
-    char res_strings[5][64];  // Pre-allocate strings
-    u32 text_positions[5][2]; // Pre-calculate positions
-    
-    sprintf(res_strings[0], "Resolution: %d x %d x %d", xres, yres, bpp);
-    sprintf(res_strings[1], "BG write took: -- ms");
-    sprintf(res_strings[2], "DMA BG draw took: -- ms");
-    sprintf(res_strings[3], "Video Drawing Done!");
-    sprintf(res_strings[4], "FRAME DRAW TIME: -- ms");
-
-    for (int i = 0; i < 10; i++) {
-        u64 ms_start = timer_get_ticks() / 1000;
-
-        // OPTIMIZATION: Copy background once to draw buffer
-        if (fb_req.depth.bpp == 32) {
-            // Use optimized memcpy or DMA for background
-            if (use_dma) {
-                do_dma((void*)vid_buffer, bg32_buffer, fb_req.buff.screen_size);
-            } else {
-                // Fast 32-bit copy
-                u32 *dest = (u32 *)FRAMEBUFFER;
-                u32 *src = bg32_buffer;
-                u32 count = fb_req.buff.screen_size / 4;
-                while (count >= 4) {  // Unroll loop
-                    dest[0] = src[0];
-                    dest[1] = src[1]; 
-                    dest[2] = src[2];
-                    dest[3] = src[3];
-                    dest += 4;
-                    src += 4;
-                    count -= 4;
-                }
-                while (count--) *dest++ = *src++;
-            }
-        } else if (fb_req.depth.bpp == 8) {
-            if (use_dma) {
-                do_dma((void*)vid_buffer, bg8_buffer, fb_req.buff.screen_size);
-            } else {
-                u32 *dest = (u32 *)FRAMEBUFFER;
-                u32 *src = bg8_buffer;
-                u32 count = fb_req.buff.screen_size / 4;
-                while (count >= 4) {
-                    dest[0] = src[0];
-                    dest[1] = src[1];
-                    dest[2] = src[2]; 
-                    dest[3] = src[3];
-                    dest += 4;
-                    src += 4;
-                    count -= 4;
-                }
-                while (count--) *dest++ = *src++;
-            }
-        }
-
-        u64 ms_bg_end = timer_get_ticks() / 1000;
-        u32 ms_buff = ms_bg_end - ms_start;
-        
-        // Update timing strings efficiently (only numbers change)
-        sprintf(res_strings[1], "BG write took: %d ms", ms_buff);
-
-        // OPTIMIZATION: Draw all text at once without intermediate DMA
-        u32 base_x = 20 + (i * 20);
-        u32 base_y = 20 + (i * 20);
-        
-        video_draw_string(res_strings[0], base_x, base_y);
-        video_draw_string(res_strings[1], base_x, base_y + 20);
-        video_draw_string(res_strings[2], base_x, base_y + 40);  
-        video_draw_string(res_strings[3], base_x, base_y + 60);
-
-        u64 ms_text_end = timer_get_ticks() / 1000;
-        
-        // Single DMA operation for the entire frame
-        if (use_dma) {
-            video_dma();
-        }
-        
-        u64 ms_end = timer_get_ticks() / 1000;
-        
-        // Update final timing and draw it
-        sprintf(res_strings[4], "FRAME DRAW TIME: %d ms", (u32)(ms_end - ms_start));
-        video_draw_string(res_strings[4], base_x, base_y + 80);
-        
-        // Final DMA for the timing text
-        if (use_dma) {
-            video_dma();
-        }
-
-        timer_sleep(2000);
-    }
+    frame_dirty = true;
 }
 
+// Keep your existing optimized functions
 void video_draw_pixel(u32 x, u32 y, u32 color) {
     if (x >= fb_req.res.xres || y >= fb_req.res.yres) return;
     
@@ -332,8 +510,39 @@ void video_draw_pixel(u32 x, u32 y, u32 color) {
         u8 *buff = (u8 *)DRAWBUFFER;
         buff[y * fb_req.pitch.pitch + x] = color & 0xFF;
     }
+    frame_dirty = true;
 }
 
+// USAGE EXAMPLE FOR  OS:
+void demo_usage() {
+    // Set resolution normally
+    video_set_resolution(800, 600, 32);
+    
+    // Add various text elements
+    u32 title_id = video_add_text("My Operating System v1.0", 10, 10, 0xFFFFFFFF);
+    u32 status_id = video_add_text("Status: Running", 10, 40, 0xFF00FF00);
+    u32 fps_id = video_add_text("FPS: 0", 500, 70, 0xFFFFFF00);
+    
+    // Main loop (your OS main loop)
+    for (int frame = 0; frame < 1000; frame++) {
+        // Update dynamic text
+        char fps_text[64];
+        sprintf(fps_text, "FPS: %d", 1000 / video_get_frame_time());
+        video_update_text(fps_id, fps_text);
+        
+        char status_text[64];
+        sprintf(status_text, "Frame: %d", frame);
+        video_update_text(status_id, status_text);
+        
+        // Move title around for demo
+        video_move_text(title_id, 10 + (frame % 600), 10);
+        
+        // Render only when something changed
+        video_render_frame(); // Will skip if nothing dirty
+        
+        
+    }
+}
 void video_draw_char(char c, u32 pos_x, u32 pos_y) {
     if (!cache_initialized) return;
     if (pos_x + font_get_width() > fb_req.res.xres || 
