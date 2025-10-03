@@ -8,7 +8,7 @@ void run_uart_demo(){
 
 	uart.init();
 
-	uart.printf("Hello");
+	uart.printf("Hello\n");
 }
 
 

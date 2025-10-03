@@ -7,13 +7,13 @@ ASMOPS = -Iinclude
 BUILD_DIR = build
 SRC_DIR = src
 
-C_FILES := $(wildcard $(SRC_DIR)/*.c)
-CPP_FILES := $(wildcard $(SRC_DIR)/*.cpp)
-ASM_FILES := $(wildcard $(SRC_DIR)/*.S)
+C_FILES := $(shell find $(SRC_DIR) -name "*.c")
+CPP_FILES := $(shell find $(SRC_DIR) -name "*.cpp")
+ASM_FILES := $(shell find $(SRC_DIR) -name "*.S")
 
-C_OBJS := $(C_FILES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%_c.o)
-CPP_OBJS := $(CPP_FILES:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%_cpp.o)
-ASM_OBJS := $(ASM_FILES:$(SRC_DIR)/%.S=$(BUILD_DIR)/%_s.o)
+C_OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%_c.o,$(C_FILES))
+CPP_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%_cpp.o,$(CPP_FILES))
+ASM_OBJS := $(patsubst $(SRC_DIR)/%.S,$(BUILD_DIR)/%_s.o,$(ASM_FILES))
 
 OBJ_FILES := $(C_OBJS) $(CPP_OBJS) $(ASM_OBJS)
 DEP_FILES := $(OBJ_FILES:.o=.d)

@@ -107,7 +107,7 @@ static void update_dynamic_ui(Renderer& renderer,
 void run_graphics_demo() {
     Renderer renderer;
     if (!renderer.init()) return;
-    renderer.configure(800, 600, 32);
+    renderer.configure(1366, 768, 32);
     
     // Text objects
     TextObject title("", 20, 16, Colors::Theme::TEXT);
