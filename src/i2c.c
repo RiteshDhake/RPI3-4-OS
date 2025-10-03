@@ -1,4 +1,4 @@
-#include "gpio.h"
+#include "Gpio/gpio.h"
 #include "peripherals/i2c.h"
 #include "i2c.h"
 #include "printf.h"

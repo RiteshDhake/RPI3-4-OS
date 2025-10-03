@@ -1,4 +1,4 @@
-#include "gpio.h"
+#include "Gpio/gpio.h"
 #include "utils.h"
 
 #define GPIO_PINS {1,2,3,4,5,6}  // List of GPIO pin numbers
@@ -26,15 +26,10 @@ void gpio_pin_enable(u8 pinNumber){
     REGS_GPIO->pupd_enable_clocks[pinNumber/32] = 0;
 }
 
-void gpio_init(GpioFunc func){
-
-    const int output_pins[] = GPIO_PINS;
-    size numPins  =( sizeof(output_pins)/sizeof(output_pins[0]));
-
-    for (int i = 0 ; i < numPins ; i++){
-        gpio_pin_set_func(output_pins[i],func);
-        gpio_pin_enable(output_pins[i]);
-    }
+void gpio_init(u8 pinNumber,GpioFunc func){
+        gpio_pin_set_func(pinNumber,func);
+        gpio_pin_enable(pinNumber);
+    
 }
 
 void gpio_set(u8 pinNumber){
@@ -67,4 +62,13 @@ void gpio_debug(){
         gpio_clear(output_pins[i]);
     } 
 
+}
+void gpio_init_all( GpioFunc func){
+    const int output_pins[] = GPIO_PINS;
+    size numPins  =( sizeof(output_pins)/sizeof(output_pins[0]));
+
+    for (int i = 0 ; i < numPins ; i++){
+        gpio_pin_set_func(output_pins[i],func);
+        gpio_pin_enable(output_pins[i]);
+    }
 }

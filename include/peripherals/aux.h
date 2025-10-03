@@ -34,7 +34,7 @@ struct UartRegs{
     reg32 u_ris;     //raw interrupt status reg
     reg32 u_mis;     //masked interrupt status reg
     reg32 u_icr;     //interrupt clear register
-    reg32 u_dmacr;   //dma controller regs (not suppirted in rpi3)
+    reg32 u_dmacr;   //dma controller regs (not supported in rpi3)
     reg32 u_itcr;    //test control reg
     reg32 u_itip;    //integraton test input reg
     reg32 u_itop;    //integration test output reg

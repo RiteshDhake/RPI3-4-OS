@@ -3,7 +3,7 @@
 #include "entry.h"
 #include "peripherals/irq.h"
 #include "peripherals/aux.h"
-#include "mini_uart.h"
+#include "Uart/mini_uart.h"
 #include "timer.h"
 
 const char entry_error_messages[16][32] = {

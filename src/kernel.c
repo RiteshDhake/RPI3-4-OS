@@ -1,13 +1,16 @@
 #include "common.h"
-#include "mini_uart.h"
-#include "gpio.h"
+#include "Uart/UartDemo.hpp"
+#include "Gpio/gpio.h"
 #include "utils.h"
 #include "printf.h"
 #include "irq.h"
 #include "timer.h"
 #include "mailbox.h"
-#include "video.h"
+#include "Graphics/compositor.h"
+#include "Uart/mini_uart.h"
 
+extern void run_graphics_demo();
+extern void run_uart_demo();
 
 void putc(void *p , char c){
     if(c == '\n'){
@@ -17,12 +20,13 @@ void putc(void *p , char c){
     uart_send(c);
 }
 
+
 u32  get_el();
 
 void kernel_main() {
-    uart_init();
+   uart_init();
     init_printf(0,putc);
-    gpio_init(GFOutput);
+    gpio_init_all(GFOutput);
     // uart_send_string("Rasperry PI Bare Metal OS Initializing...\n");
     // gpio_debug();
     printf("Rasperry PI Bare Metal OS Initializing...\n");
@@ -30,10 +34,11 @@ void kernel_main() {
     irq_init_vectors();
     enable_interrupt_controller();
     irq_enable(); 
-    timer_init();
-    printf("Waiting for 200ms");
+    timer_init(); 
+    printf("Waiting for 200ms\n");
     timer_sleep(200);
-
+    run_uart_demo();
+    run_graphics_demo(); 
 #if RPI_VERSION == 3
     printf("\tBoard: Raspberry PI 3\n");
     
@@ -55,12 +60,12 @@ void kernel_main() {
 
     //Do video...
 
-    video_init();
+    // video_init();
 
     
 
-    printf("YES DMA...\n");
-    video_set_dma(true);
+    // printf("YES DMA...\n");
+    // video_set_dma(true);
 
     
 
@@ -82,10 +87,13 @@ void kernel_main() {
     // printf("Resolution 800x600\n");
     // video_set_resolution(800, 600, 8);
 
-    demo_usage();
+    // demo_usage();
+    
+    // printf("Waiting for 5 second\n");
+    // timer_sleep(5000);
+    // demo_usage();
 
-
-    printf ("\nException Level: %d \n",get_el());
+    printf ("\nException Level: %d \n",get_el()); 
     while(1) {
         u32 cur_temp = 0;
 

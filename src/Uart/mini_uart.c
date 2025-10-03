@@ -1,12 +1,14 @@
-#include "gpio.h"
+#include "Gpio/gpio.h"
 #include "utils.h"
 #include "peripherals/aux.h"
-#include "mini_uart.h"
+#include "Uart/mini_uart.h"
 
-#define TXD 14
-#define RXD 15
+int  init = 0;
 
 void uart_init() {
+    if(init){
+        return;
+    }
     gpio_pin_set_func(TXD, GFAlt5);
     gpio_pin_set_func(RXD, GFAlt5);
 
@@ -32,6 +34,8 @@ void uart_init() {
     uart_send('\r');
     uart_send('\n');
     uart_send('\n');
+
+    init = 1;
 }
 
 void uart_send(char c) {
@@ -55,4 +59,17 @@ void uart_send_string(char *str) {
         uart_send(*str);
         str++;
     }
+}
+
+bool uart_is_readable() {
+    return (REGS_AUX->mu_lsr & 1) != 0;
+}
+
+bool uart_is_writable() {
+    return (REGS_AUX->mu_lsr & 0x20) != 0;
+}
+
+void uart_flush() {
+    // Wait for transmitter to finish
+    while(!(REGS_AUX->mu_lsr & 0x40));
 }

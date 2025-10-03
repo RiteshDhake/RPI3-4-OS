@@ -1,6 +1,6 @@
 #pragma once
 
-#include <stdlib.h>
+#include "common.h"
 
 typedef struct heap_block {
     size_t size;
