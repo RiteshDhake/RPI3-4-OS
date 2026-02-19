@@ -78,7 +78,7 @@ int strcmp(const char *s1, const char *s2) {
 // Add text to screen - returns ID for later updates
 u32 video_add_text(char *text, u32 x, u32 y, u32 color) {
     if (num_text_objects >= MAX_TEXT_OBJECTS) return 0;
-    printf("Adding text '%s' at (%d, %d) color=0x%x\n", text, x, y, color);//debugging 
+    // printf("Adding text '%s' at (%d, %d) color=0x%x\n", text, x, y, color);//debugging 
     text_object *obj = &text_objects[num_text_objects++];
     strncpy(obj->text, text, MAX_TEXT_LENGTH - 1);
     obj->text[MAX_TEXT_LENGTH - 1] = 0;// strings should be null terminated for printf function
@@ -102,7 +102,7 @@ void video_update_text(u32 id, char *new_text) {
                 text_objects[i].text[MAX_TEXT_LENGTH - 1] = 0;
                 text_objects[i].dirty = true;
                 frame_dirty = true;
-                printf("Updating text");
+                // printf("Updating text");
             }
             break;
         }
@@ -169,14 +169,13 @@ void video_render_frame() {
         printf("Skipping Frame Render");
         return;
     }  // Skip if nothing changed
-    printf("Rendering Frame");
     u64 ms_start = timer_get_ticks() / 1000;
     
     // Clear background (keeping your optimization)
     if (fb_req.depth.bpp == 32) {
         if (use_dma) {
             do_dma((void*)vid_buffer, bg32_buffer, fb_req.buff.screen_size);
-            printf("DMA done");
+            
         } else {
             u32 *dest = (u32 *)FRAMEBUFFER;
             u32 *src = bg32_buffer;
@@ -217,7 +216,7 @@ void video_render_frame() {
     // Single DMA transfer for entire frame
     if (use_dma) {
         video_dma();
-        printf("Video Dma is called ");
+       
     }
     
     frame_dirty = false;
@@ -239,30 +238,68 @@ void video_mark_dirty() {
     frame_dirty = true;
 }
 
+
+
 void demo_usage() {
-    // Set resolution normally
+    video_init();
     video_set_resolution(800, 600, 32);
-    
-    // Add various text elements
-    u32 title_id = video_add_text("My Operating System v1.0", 10, 10, 0xFFFFFFFF);
-    u32 status_id = video_add_text("Status: Running", 10, 40, 0xFF00FF00);
-    u32 fps_id = video_add_text("FPS: 0", 500, 70, 0xFFFFFF00);
-    
-    // Main loop (your OS main loop)
-    for (int frame = 0; frame < 1000; frame++) {
-        // Update dynamic text
-        char fps_text[64];
-        sprintf(fps_text, "FPS: %d", 1000 / video_get_frame_time());
-        video_update_text(fps_id, fps_text);
-        
-        char status_text[64];
-        sprintf(status_text, "Frame: %d", frame);
-        video_update_text(status_id, status_text);
-        
-        // Move title around for demo
-        video_move_text(title_id, 10 + (frame % 600), 10);
-        
-        // Render only when something changed
-        video_render_frame(); // Will skip if nothing dirty 
+
+    // Static labels
+    u32 title_id      = video_add_text("My Operating System v1.0", 10, 10,  0xFFFFFFFF);
+    u32 status_id     = video_add_text("Status: Running",          10, 40,  0xFF00FF00);
+    u32 fps_id        = video_add_text("FPS: 0",                   10, 70,  0xFFFFFF00);
+    u32 frame_id      = video_add_text("Frame: 0",                 10, 100, 0xFF00FFFF);
+    u32 frametime_id  = video_add_text("Frame Time: 0 ms",         10, 130, 0xFFFFA500);
+    u32 total_id      = video_add_text("Total Frames: 0",          10, 160, 0xFFAAAAFF);
+    u32 objects_id    = video_add_text("Objects: 0",               10, 190, 0xFF00FFAA);
+    u32 dma_id        = video_add_text("DMA: OFF",                 10, 220, 0xFFFF5555);
+    u32 res_id        = video_add_text("Resolution: 800x600x32",   10, 250, 0xFFFFFFFF);
+
+    // Moving text demo
+    u32 moving_id     = video_add_text("Moving Text Demo", 300, 300, 0xFFFF00FF);
+
+    for (int frame = 1; frame <= 2000; frame++) {
+
+        // ----- Dynamic Data -----
+        char buffer[128];
+
+        // FPS
+        u32 frame_time = video_get_frame_time();
+        u32 fps = (frame_time > 0) ? (1000 / frame_time) : 0;
+        sprintf(buffer, "FPS: %d", fps);
+        video_update_text(fps_id, buffer);
+
+        // Frame counter
+        sprintf(buffer, "Frame: %d", frame);
+        video_update_text(frame_id, buffer);
+
+        // Frame time
+        sprintf(buffer, "Frame Time: %d ms", frame_time);
+        video_update_text(frametime_id, buffer);
+
+        // Total frames rendered
+        sprintf(buffer, "Total Frames: %d", video_get_frame_count());
+        video_update_text(total_id, buffer);
+
+        // Text object count
+        sprintf(buffer, "Objects: %d", num_text_objects);
+        video_update_text(objects_id, buffer);
+
+        // DMA status
+        sprintf(buffer, "DMA: %s", use_dma ? "ON" : "OFF");
+        video_update_text(dma_id, buffer);
+
+        // Animated moving text
+        video_move_text(moving_id, 100 + (frame % 600), 300);
+
+        // Change status every 300 frames
+        if (frame % 300 == 0) {
+            video_update_text(status_id, "Status: Updating...");
+        } else if (frame % 300 == 150) {
+            video_update_text(status_id, "Status: Running");
+        }
+
+        // Render frame
+        video_render_frame();
     }
 }

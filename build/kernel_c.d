@@ -3,5 +3,6 @@ build/kernel_c.o: src/kernel.c include/common.h include/Uart/UartDemo.hpp \
  include/peripherals/base.h include/utils.h include/printf.h \
  include/irq.h include/timer.h include/mailbox.h \
  include/Graphics/compositor.h include/Graphics/framebuffer.h \
- include/dma.h include/peripherals/dma.h include/Graphics/font.h \
- include/Uart/mini_uart.h include/peripherals/aux.h
+ include/dma.h include/peripherals/dma.h include/mm.h \
+ include/Graphics/font.h include/Uart/mini_uart.h \
+ include/peripherals/aux.h include/mem.h include/heap_allocator.h

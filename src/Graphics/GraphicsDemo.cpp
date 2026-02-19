@@ -107,7 +107,7 @@ static void update_dynamic_ui(Renderer& renderer,
 void run_graphics_demo() {
     Renderer renderer;
     if (!renderer.init()) return;
-    renderer.configure(1366, 768, 32);
+    renderer.configure(800, 600, 32);
     
     // Text objects
     TextObject title("", 20, 16, Colors::Theme::TEXT);
@@ -134,7 +134,7 @@ void run_graphics_demo() {
     // Initialize static labels
     setup_static_ui(title, subtitle, panelTitle, statusLabel, uptimeLabel, resourceLabel);
 
-    for (int frame = 0; frame < 1000; frame++) {
+    for (int frame = 0; frame < 20; frame++) {
         // Draw boxes and panels
         draw_background(renderer);
 

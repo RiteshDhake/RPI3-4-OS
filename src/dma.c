@@ -36,7 +36,8 @@ dma_channel*dma_open_channel(u32 channel){
     dma_channel *dma = (dma_channel *)&channels[_channel];
     dma->channel = _channel;
 
-    dma->block = (dma_control_block *)((LOW_MEMORY +31)&~31);
+    // dma->block = (dma_control_block *)((LOW_MEMORY +31)&~31);
+    dma->block =(dma_control_block *)allocate_memory(sizeof(dma_control_block));
     dma->block->res[0] = 0;
     dma->block->res[1] = 0;
 
@@ -71,13 +72,19 @@ void dma_setup_mem_copy(dma_channel *channel, void *dest, void *src, u32 length,
 }
 
 void dma_start(dma_channel *channel) {
-    REGS_DMA(channel->channel)->control_block_addr = BUS_ADDRESS((u32)channel->block);
+   
 
+      asm volatile("dsb sy");
+    REGS_DMA(channel->channel)->control_block_addr = BUS_ADDRESS((u32)channel->block);
+  asm volatile("dsb sy");
     REGS_DMA(channel->channel)->control = CS_WAIT_FOR_OUTSTANDING_WRITES
 					      | (DEFAULT_PANIC_PRIORITY << CS_PANIC_PRIORITY_SHIFT)
 					      | (DEFAULT_PRIORITY << CS_PRIORITY_SHIFT)
 					      | CS_ACTIVE;
+        asm volatile("dsb sy");
 }
+
+  
 
 bool dma_wait(dma_channel *channel) {
     while(REGS_DMA(channel->channel)->control & CS_ACTIVE) ;

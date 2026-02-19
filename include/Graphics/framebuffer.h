@@ -3,6 +3,7 @@
 #include "common.h"
 #include "dma.h"
 #include "mailbox.h"
+#include "mm.h"
 
 // void demo_usage();
 
@@ -64,9 +65,11 @@ extern bool screen_initialized;
 
 //hack for not having an allocate function yet...
 #define UNCACHED_MEM_BASE 0x40000000
-#define BG32_MEM_LOCATION (LOW_MEMORY + (10 * MB))
+#define BG32_MEM_LOCATION (GRAPH_START_MEMORY + (10 * MB))//14MB
 #define BG8_MEM_LOCATION (BG32_MEM_LOCATION + (10 * MB))
-#define VB_MEM_LOCATION (BG8_MEM_LOCATION + (4 * MB))
+#define VB_MEM_LOCATION (BG8_MEM_LOCATION + (4 * MB))//28MB
+// 14MB->28MB graphics region
+
 #define BUS_ADDR(x) (((u64)x | 0x40000000) & ~0xC0000000)
 #define FRAMEBUFFER ((volatile u8 *)BUS_ADDR(fb_req.buff.base))
 #define DMABUFFER ((volatile u8 *)vid_buffer)

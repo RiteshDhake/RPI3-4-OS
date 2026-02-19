@@ -4,6 +4,7 @@
 #include "Graphics/framebuffer.h"
 #include "dma.h"
 #include "mm.h"
+#include "mem.h"
 #include <stddef.h>
 #include "Graphics/font.h"
 #include "Graphics/compositor.h"
@@ -19,14 +20,20 @@ bool screen_initialized = false;
 
 
 void video_init() {
+    // u32 screen_size = fb_req.buff.screen_size;
+
     dma = dma_open_channel(CT_NORMAL);
     vid_buffer = (u8 *)VB_MEM_LOCATION;
+    // vid_buffer =  allocate_memory(4*MB);
 
     printf("DMA CHANNEL: %d\n", dma->channel);
     printf("VID BUFF: %X\n", vid_buffer);
 
     bg32_buffer = (u32 *)BG32_MEM_LOCATION;
     bg8_buffer = (u32 *)BG8_MEM_LOCATION;
+
+    // bg32_buffer =  allocate_memory(10*MB);
+    // bg8_buffer =  allocate_memory(10*MB);
 
     for (int i=0; i<(10 * MB) / 4; i++) {
         bg32_buffer[i] = BACK_COLOR;
@@ -62,7 +69,7 @@ void do_dma(void *dest, void *src, u32 total) {
         start += num_bytes;
         total -= num_bytes;
     }
-    printf("Doing DMA transfer");
+    
 }
 
 void video_dma() {
